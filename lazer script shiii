@@ -1,0 +1,198 @@
+local P = game:GetService("Players").LocalPlayer
+local RS = game:GetService("ReplicatedStorage")
+local TS = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
+local Lit = game:GetService("Lighting")
+local VU = game:GetService("VirtualUser")
+
+-- 1. PURGE OLD GUI (Auto-Cleanup)
+local UI_NAME = "Core_Utility_Panel"
+local function purge(parent)
+	local old = parent and parent:FindFirstChild(UI_NAME)
+	if old then old:Destroy() end
+end
+if gethui then purge(gethui()) end
+pcall(purge, game:GetService("CoreGui"))
+pcall(purge, game:GetService("CoreGui"):FindFirstChild("RobloxGui"))
+purge(P:WaitForChild("PlayerGui"))
+
+-- 2. REMOTES & VARS
+local RF = RS:WaitForChild("CommonModules"):WaitForChild("Systems"):WaitForChild("NetworkSystem"):WaitForChild("Network"):WaitForChild("RemoteFunction")
+local CF = CFrame.new(1144.38281, 105.178291, -267.520264, 0, 0, 1, 0, 1, -0, -1, 0, 0)
+
+-- Workspace Hierarchy Paths
+local DynamicObjects = workspace:WaitForChild("DynamicObjects")
+local Worlds = DynamicObjects:WaitForChild("Worlds")
+local PurpleWorld = Worlds:WaitForChild("Purple")
+local Lobby = PurpleWorld:WaitForChild("Lobby")
+local TreadmillsFolder = Lobby:WaitForChild("Treadmills")
+local Treadmill25 = TreadmillsFolder:WaitForChild("25")
+
+local autoWin, autoEgg, lowQ, antiAfk, autoTrain, isWinning = false, false, false, false, false, false
+
+-- 3. LOGIC FUNCTIONS
+local function doEggs()
+	local eggArgs = {
+		"EggService.open",
+		{
+			{name = "Egg10", type = "Egg"},
+			{name = "Egg10", type = "Egg"},
+			{name = "Egg10", type = "Egg"}
+		}
+	}
+	task.spawn(pcall, RF.InvokeServer, RF, eggArgs[1], eggArgs[2])
+end
+
+local function tpAndWalk()
+	if isWinning then return end
+	isWinning = true
+	local char = P.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChild("Humanoid")
+	if hrp and hum then
+		-- Your working win code
+		hrp.CFrame = CFrame.new(CF.Position + Vector3.new(0, 0, 6))
+		task.wait(0.1)
+		hum:MoveTo(CF.Position)
+		task.wait(0.3)
+		
+		-- Safely hand control back over to the treadmill right here
+		if autoTrain then
+			local tCF
+			if Treadmill25:IsA("Model") then tCF = Treadmill25:GetPivot()
+			elseif Treadmill25:IsA("BasePart") then tCF = Treadmill25.CFrame + Vector3.new(0, 3, 0) end
+			if tCF then hrp.CFrame = tCF end
+		end
+	end
+	isWinning = false
+end
+
+local function toggleLQ()
+	lowQ = not lowQ
+	task.spawn(function()
+		local pGui = P:FindFirstChild("PlayerGui")
+		local fxFolder = pGui and pGui:FindFirstChild("Effects")
+		if fxFolder and lowQ then
+			local confetti = fxFolder:FindFirstChild("ConfettiFrame")
+			if confetti then
+				if confetti:IsA("ScreenGui") then confetti.Enabled = false
+				elseif confetti:IsA("GuiObject") then confetti.Visible = false end
+			end
+		end
+	end)
+end
+
+P.Idled:Connect(function()
+	if antiAfk then
+		pcall(function()
+			VU:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+			task.wait(1)
+			VU:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+		end)
+	end
+end)
+
+-- 4. GUI SETUP
+local sg = Instance.new("ScreenGui")
+sg.Name = UI_NAME
+sg.ResetOnSpawn = false
+sg.Parent = gethui and gethui() or game:GetService("CoreGui"):FindFirstChild("RobloxGui") or P:WaitForChild("PlayerGui")
+
+local f = Instance.new("Frame")
+f.Size = UDim2.new(0, 200, 0, 305)
+f.Position = UDim2.new(0.1, 0, 0.4, 0)
+f.BackgroundColor3 = Color3.fromRGB(28, 29, 33)
+f.BorderSizePixel = 0
+f.Active, f.Draggable = true, true
+f.Parent = sg
+Instance.new("UICorner", f).CornerRadius = UDim.new(0, 6)
+
+local topBar = Instance.new("Frame")
+topBar.Size = UDim2.new(1, 0, 0, 4)
+topBar.BackgroundColor3 = Color3.fromRGB(55, 142, 208)
+topBar.BorderSizePixel = 0
+topBar.Parent = f
+Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 4)
+
+local function makeBtn(txt, yOffset, color)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(1, -20, 0, 30)
+	b.Position = UDim2.new(0, 10, 0, yOffset)
+	b.BackgroundColor3 = Color3.fromRGB(43, 45, 51)
+	b.Font = Enum.Font.SourceSansSemibold
+	b.Text = txt
+	b.TextColor3 = color or Color3.fromRGB(240, 240, 240)
+	b.TextSize = 14
+	b.Parent = f
+	Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+	
+	b.MouseEnter:Connect(function() TS:Create(b, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(55, 60, 68)}):Play() end)
+	b.MouseLeave:Connect(function() TS:Create(b, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(43, 45, 51)}):Play() end)
+	return b
+end
+
+local function toggleAnim(b, state, textOn, textOff)
+	b.Text = state and textOn or textOff
+	TS:Create(b, TweenInfo.new(0.3), {TextColor3 = state and Color3.fromRGB(80, 200, 80) or Color3.fromRGB(235, 90, 90)}):Play()
+end
+
+-- 5. CREATE BUTTONS
+local b1 = makeBtn("INSTANT WIN", 15)
+local b2 = makeBtn("AUTO WIN: OFF", 55, Color3.fromRGB(235, 90, 90))
+local b3 = makeBtn("BUY TRIPLE EGG", 95)
+local b4 = makeBtn("AUTO EGG: OFF", 135, Color3.fromRGB(235, 90, 90))
+local b5 = makeBtn("NO CONFETTI: OFF", 175, Color3.fromRGB(235, 90, 90))
+local b6 = makeBtn("ANTI-AFK: OFF", 215, Color3.fromRGB(235, 90, 90))
+local b7 = makeBtn("TREADMILL 25: OFF", 255, Color3.fromRGB(235, 90, 90))
+
+-- 6. CLICK CONNECTIONS
+b1.MouseButton1Click:Connect(tpAndWalk)
+b2.MouseButton1Click:Connect(function() autoWin = not autoWin toggleAnim(b2, autoWin, "AUTO WIN: ON", "AUTO WIN: OFF") end)
+b3.MouseButton1Click:Connect(doEggs)
+b4.MouseButton1Click:Connect(function() autoEgg = not autoEgg toggleAnim(b4, autoEgg, "AUTO EGG: ON", "AUTO EGG: OFF") end)
+b5.MouseButton1Click:Connect(function() toggleLQ() toggleAnim(b5, lowQ, "NO CONFETTI: ON", "NO CONFETTI: OFF") end)
+b6.MouseButton1Click:Connect(function() antiAfk = not antiAfk toggleAnim(b6, antiAfk, "ANTI-AFK: ON", "ANTI-AFK: OFF") end)
+b7.MouseButton1Click:Connect(function() autoTrain = not autoTrain toggleAnim(b7, autoTrain, "TREADMILL 25: ON", "TREADMILL 25: OFF") end)
+
+-- 7. BACKGROUND PROCESSOR LOOP
+task.spawn(function()
+	local eggTimer = 0
+	while true do
+		task.wait(0.05) -- Fast check rate
+		
+		local char = P.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		
+		-- Only run the treadmill assignment if you aren't currently mid-teleport win sequence
+		if autoTrain and not isWinning and hrp then
+			local tCF
+			if Treadmill25:IsA("Model") then tCF = Treadmill25:GetPivot()
+			elseif Treadmill25:IsA("BasePart") then tCF = Treadmill25.CFrame + Vector3.new(0, 3, 0) end
+			if tCF then hrp.CFrame = tCF end
+		end
+		
+		-- Handle slower background actions at intervals
+		eggTimer = eggTimer + 0.05
+		if eggTimer >= 0.25 then
+			if autoWin and not isWinning then task.spawn(tpAndWalk) end
+			
+			if lowQ then
+				local pGui = P:FindFirstChild("PlayerGui")
+				local fxFolder = pGui and pGui:FindFirstChild("Effects")
+				if fxFolder then
+					local confetti = fxFolder:FindFirstChild("ConfettiFrame")
+					if confetti then
+						if confetti:IsA("ScreenGui") and confetti.Enabled then confetti.Enabled = false
+						elseif confetti:IsA("GuiObject") and confetti.Visible then confetti.Visible = false end
+					end
+				end
+			end
+			
+			if autoEgg and eggTimer >= 0.75 then
+				doEggs()
+			end
+			
+			if eggTimer >= 0.75 then eggTimer = 0 end
+		end
+	end
+end)
