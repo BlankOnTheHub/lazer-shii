@@ -5,7 +5,7 @@ local UIS = game:GetService("UserInputService")
 local Lit = game:GetService("Lighting")
 local VU = game:GetService("VirtualUser")
 
--- 1. PURGE OLD GUI (Auto-Cleanup)
+-- 1. PURGE MODULE LAYER
 local UI_NAME = "Core_Utility_Panel"
 local function purge(parent)
 	local old = parent and parent:FindFirstChild(UI_NAME)
@@ -16,11 +16,13 @@ pcall(purge, game:GetService("CoreGui"))
 pcall(purge, game:GetService("CoreGui"):FindFirstChild("RobloxGui"))
 purge(P:WaitForChild("PlayerGui"))
 
--- 2. REMOTES & VARS
+-- 2. INSTANCE REFERENCES
 local RF = RS:WaitForChild("CommonModules"):WaitForChild("Systems"):WaitForChild("NetworkSystem"):WaitForChild("Network"):WaitForChild("RemoteFunction")
+
+-- Original static target coordinates for manual/un-stretched methods
 local CF = CFrame.new(1144.38281, 105.178291, -267.520264, 0, 0, 1, 0, 1, -0, -1, 0, 0)
 
--- Workspace Hierarchy Paths
+-- Deep Workspace hierarchy resolved from your Explorer screenshots
 local DynamicObjects = workspace:WaitForChild("DynamicObjects")
 local Worlds = DynamicObjects:WaitForChild("Worlds")
 local PurpleWorld = Worlds:WaitForChild("Purple")
@@ -28,9 +30,48 @@ local Lobby = PurpleWorld:WaitForChild("Lobby")
 local TreadmillsFolder = Lobby:WaitForChild("Treadmills")
 local Treadmill25 = TreadmillsFolder:WaitForChild("25")
 
-local autoWin, autoEgg, lowQ, antiAfk, autoTrain, isWinning = false, false, false, false, false, false
+-- [CRITICAL]: Attempt to track down the physical TouchTransmitter zone block responsible for wins
+-- If the game handles wins via an explicit part inside the hierarchy, it will grab it here.
+local WinZonePart = workspace:FindFirstChild("WinZone") or workspace:FindFirstChild("WinPart") or workspace:FindFirstChild("FinishLine")
 
--- 3. LOGIC FUNCTIONS
+-- Global Tracking Variables
+local selectedMode = "None" -- Options: "None", "Auto Win Only", "Auto Treadmill 25 Only", "Combo (Stretch)"
+local autoEgg, lowQ, antiAfk, isWinning = false, false, false, false
+local dropdownOpen = false
+
+-- Backup variables to store the win part's original form
+local originalSize, originalCFrame
+
+if WinZonePart and WinZonePart:IsA("BasePart") then
+	originalSize = WinZonePart.Size
+	originalCFrame = WinZonePart.CFrame
+end
+
+-- 3. UTILITY METHODS
+local function getTreadmillCFrame()
+	if Treadmill25:IsA("Model") then
+		return Treadmill25:GetPivot()
+	elseif Treadmill25:IsA("BasePart") then
+		return Treadmill25.CFrame + Vector3.new(0, 3, 0)
+	end
+	return nil
+end
+
+local function tpAndWalk()
+	if isWinning then return end
+	isWinning = true
+	local char = P.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChild("Humanoid")
+	if hrp and hum then
+		hrp.CFrame = CFrame.new(CF.Position + Vector3.new(0, 0, 6))
+		task.wait(0.1)
+		hum:MoveTo(CF.Position)
+		task.wait(0.3)
+	end
+	isWinning = false
+end
+
 local function doEggs()
 	local eggArgs = {
 		"EggService.open",
@@ -43,63 +84,22 @@ local function doEggs()
 	task.spawn(pcall, RF.InvokeServer, RF, eggArgs[1], eggArgs[2])
 end
 
-local function tpAndWalk()
-	if isWinning then return end
-	isWinning = true
-	local char = P.Character
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	local hum = char and char:FindFirstChild("Humanoid")
-	if hrp and hum then
-		-- Your working win code
-		hrp.CFrame = CFrame.new(CF.Position + Vector3.new(0, 0, 6))
-		task.wait(0.1)
-		hum:MoveTo(CF.Position)
-		task.wait(0.3)
-		
-		-- Safely hand control back over to the treadmill right here
-		if autoTrain then
-			local tCF
-			if Treadmill25:IsA("Model") then tCF = Treadmill25:GetPivot()
-			elseif Treadmill25:IsA("BasePart") then tCF = Treadmill25.CFrame + Vector3.new(0, 3, 0) end
-			if tCF then hrp.CFrame = tCF end
-		end
+-- Reset the win part back to its factory defaults when mode switches away from Combo
+local function resetWinPart()
+	if WinZonePart and originalSize and originalCFrame then
+		WinZonePart.Size = originalSize
+		WinZonePart.CFrame = originalCFrame
 	end
-	isWinning = false
 end
 
-local function toggleLQ()
-	lowQ = not lowQ
-	task.spawn(function()
-		local pGui = P:FindFirstChild("PlayerGui")
-		local fxFolder = pGui and pGui:FindFirstChild("Effects")
-		if fxFolder and lowQ then
-			local confetti = fxFolder:FindFirstChild("ConfettiFrame")
-			if confetti then
-				if confetti:IsA("ScreenGui") then confetti.Enabled = false
-				elseif confetti:IsA("GuiObject") then confetti.Visible = false end
-			end
-		end
-	end)
-end
-
-P.Idled:Connect(function()
-	if antiAfk then
-		pcall(function()
-			VU:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-			task.wait(1)
-			VU:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-		end)
-	end
-end)
-
--- 4. GUI SETUP
+-- 4. INTERFACE BUILDING (Dark Utility Panel Theme)
 local sg = Instance.new("ScreenGui")
 sg.Name = UI_NAME
 sg.ResetOnSpawn = false
 sg.Parent = gethui and gethui() or game:GetService("CoreGui"):FindFirstChild("RobloxGui") or P:WaitForChild("PlayerGui")
 
 local f = Instance.new("Frame")
-f.Size = UDim2.new(0, 200, 0, 305)
+f.Size = UDim2.new(0, 210, 0, 275)
 f.Position = UDim2.new(0.1, 0, 0.4, 0)
 f.BackgroundColor3 = Color3.fromRGB(28, 29, 33)
 f.BorderSizePixel = 0
@@ -114,16 +114,16 @@ topBar.BorderSizePixel = 0
 topBar.Parent = f
 Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 4)
 
-local function makeBtn(txt, yOffset, color)
+local function makeBtn(txt, yOffset, height, parentFrame)
 	local b = Instance.new("TextButton")
-	b.Size = UDim2.new(1, -20, 0, 30)
+	b.Size = UDim2.new(1, -20, 0, height or 30)
 	b.Position = UDim2.new(0, 10, 0, yOffset)
 	b.BackgroundColor3 = Color3.fromRGB(43, 45, 51)
 	b.Font = Enum.Font.SourceSansSemibold
 	b.Text = txt
-	b.TextColor3 = color or Color3.fromRGB(240, 240, 240)
-	b.TextSize = 14
-	b.Parent = f
+	b.TextColor3 = Color3.fromRGB(240, 240, 240)
+	b.TextSize = 13
+	b.Parent = parentFrame or f
 	Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
 	
 	b.MouseEnter:Connect(function() TS:Create(b, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(55, 60, 68)}):Play() end)
@@ -131,59 +131,131 @@ local function makeBtn(txt, yOffset, color)
 	return b
 end
 
+-- 5. DROPDOWN COMPONENT SETUP
+local dropMain = makeBtn("Select Automation Mode v", 15, 32)
+dropMain.BackgroundColor3 = Color3.fromRGB(48, 52, 62)
+dropMain.TextColor3 = Color3.fromRGB(55, 142, 208)
+
+local dropContainer = Instance.new("Frame")
+dropContainer.Size = UDim2.new(1, -20, 0, 0)
+dropContainer.Position = UDim2.new(0, 10, 0, 47)
+dropContainer.BackgroundColor3 = Color3.fromRGB(35, 36, 41)
+dropContainer.BorderSizePixel = 0
+dropContainer.ClipsDescendants = true
+dropContainer.ZIndex = 5
+dropContainer.Parent = f
+local dcCorner = Instance.new("UICorner", dropContainer)
+dcCorner.CornerRadius = UDim.new(0, 4)
+
+local options = {"None", "Auto Win Only", "Auto Treadmill 25 Only", "Combo (Stretch)"}
+for i, optName in ipairs(options) do
+	local optBtn = Instance.new("TextButton")
+	optBtn.Size = UDim2.new(1, 0, 0, 25)
+	optBtn.Position = UDim2.new(0, 0, 0, (i - 1) * 25)
+	optBtn.BackgroundColor3 = Color3.fromRGB(35, 36, 41)
+	optBtn.BorderSizePixel = 0
+	optBtn.Font = Enum.Font.SourceSans
+	optBtn.Text = optName
+	optBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+	optBtn.TextSize = 12
+	optBtn.ZIndex = 6
+	optBtn.Parent = dropContainer
+	
+	optBtn.MouseEnter:Connect(function() optBtn.BackgroundColor3 = Color3.fromRGB(55, 142, 208) optBtn.TextColor3 = Color3.fromRGB(255, 255, 255) end)
+	optBtn.MouseLeave:Connect(function() optBtn.BackgroundColor3 = Color3.fromRGB(35, 36, 41) optBtn.TextColor3 = Color3.fromRGB(200, 200, 200) end)
+	
+	optBtn.MouseButton1Click:Connect(function()
+		selectedMode = optName
+		dropMain.Text = "Mode: " .. optName .. " v"
+		dropdownOpen = false
+		TS:Create(dropContainer, TweenInfo.new(0.25), {Size = UDim2.new(1, -20, 0, 0)}):Play()
+		resetWinPart()
+	end)
+end
+
+dropMain.MouseButton1Click:Connect(function()
+	dropdownOpen = not dropdownOpen
+	local targetHeight = dropdownOpen and 100 or 0
+	TS:Create(dropContainer, TweenInfo.new(0.25), {Size = UDim2.new(1, -20, 0, targetHeight)}):Play()
+end)
+
+-- Standard Control Buttons (Pushed Down to clear layout spacing for the Dropdown container)
+local b3 = makeBtn("BUY TRIPLE EGG", 60)
+local b4 = makeBtn("AUTO EGG: OFF", 100) b4.TextColor3 = Color3.fromRGB(235, 90, 90)
+local b5 = makeBtn("NO CONFETTI: OFF", 140) b5.TextColor3 = Color3.fromRGB(235, 90, 90)
+local b6 = makeBtn("ANTI-AFK: OFF", 180) b6.TextColor3 = Color3.fromRGB(235, 90, 90)
+
 local function toggleAnim(b, state, textOn, textOff)
 	b.Text = state and textOn or textOff
 	TS:Create(b, TweenInfo.new(0.3), {TextColor3 = state and Color3.fromRGB(80, 200, 80) or Color3.fromRGB(235, 90, 90)}):Play()
 end
 
--- 5. CREATE BUTTONS
-local b1 = makeBtn("INSTANT WIN", 15)
-local b2 = makeBtn("AUTO WIN: OFF", 55, Color3.fromRGB(235, 90, 90))
-local b3 = makeBtn("BUY TRIPLE EGG", 95)
-local b4 = makeBtn("AUTO EGG: OFF", 135, Color3.fromRGB(235, 90, 90))
-local b5 = makeBtn("NO CONFETTI: OFF", 175, Color3.fromRGB(235, 90, 90))
-local b6 = makeBtn("ANTI-AFK: OFF", 215, Color3.fromRGB(235, 90, 90))
-local b7 = makeBtn("TREADMILL 25: OFF", 255, Color3.fromRGB(235, 90, 90))
-
--- 6. CLICK CONNECTIONS
-b1.MouseButton1Click:Connect(tpAndWalk)
-b2.MouseButton1Click:Connect(function() autoWin = not autoWin toggleAnim(b2, autoWin, "AUTO WIN: ON", "AUTO WIN: OFF") end)
 b3.MouseButton1Click:Connect(doEggs)
 b4.MouseButton1Click:Connect(function() autoEgg = not autoEgg toggleAnim(b4, autoEgg, "AUTO EGG: ON", "AUTO EGG: OFF") end)
-b5.MouseButton1Click:Connect(function() toggleLQ() toggleAnim(b5, lowQ, "NO CONFETTI: ON", "NO CONFETTI: OFF") end)
+b5.MouseButton1Click:Connect(function() 
+	lowQ = not lowQ 
+	toggleAnim(b5, lowQ, "NO CONFETTI: ON", "NO CONFETTI: OFF") 
+end)
 b6.MouseButton1Click:Connect(function() antiAfk = not antiAfk toggleAnim(b6, antiAfk, "ANTI-AFK: ON", "ANTI-AFK: OFF") end)
-b7.MouseButton1Click:Connect(function() autoTrain = not autoTrain toggleAnim(b7, autoTrain, "TREADMILL 25: ON", "TREADMILL 25: OFF") end)
 
--- 7. BACKGROUND PROCESSOR LOOP
+P.Idled:Connect(function()
+	if antiAfk then
+		pcall(function()
+			VU:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+			task.wait(1)
+			VU:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+		end)
+	end
+end)
+
+-- 6. RUNTIME PROCESSOR LOOP
 task.spawn(function()
 	local eggTimer = 0
 	while true do
-		task.wait(0.05) -- Fast check rate
+		task.wait(0.02) -- Smooth physics lock tracking cycle
 		
 		local char = P.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		local hum = char and char:FindFirstChild("Humanoid")
 		
-		-- Only run the treadmill assignment if you aren't currently mid-teleport win sequence
-		if autoTrain and not isWinning and hrp then
-			local tCF
-			if Treadmill25:IsA("Model") then tCF = Treadmill25:GetPivot()
-			elseif Treadmill25:IsA("BasePart") then tCF = Treadmill25.CFrame + Vector3.new(0, 3, 0) end
-			if tCF then hrp.CFrame = tCF end
+		-- EXECUTE AUTOMATION BASED ON DROPDOWN STATUS
+		if selectedMode == "Auto Win Only" then
+			if not isWinning then task.spawn(tpAndWalk) end
+			
+		elseif selectedMode == "Auto Treadmill 25 Only" then
+			if hrp then
+				local tCF = getTreadmillCFrame()
+				if tCF then hrp.CFrame = tCF end
+			end
+			
+		elseif selectedMode == "Combo (Stretch)" then
+			-- 1. Lock the character securely onto the machine coordinates
+			if hrp then
+				local tCF = getTreadmillCFrame()
+				if tCF then hrp.CFrame = tCF end
+			end
+			
+			-- 2. Expand and transform the finish line zone directly over the machine bounds
+			if WinZonePart and Treadmill25 then
+				pcall(function()
+					local targetPos = Treadmill25:IsA("Model") and Treadmill25:GetPivot().Position or Treadmill25.Position
+					WinZonePart.Size = Vector3.new(25, 15, 25) -- Stretches container bounds out completely
+					WinZonePart.CFrame = CFrame.new(targetPos)
+					WinZonePart.CanCollide = false
+				end)
+			end
 		end
 		
-		-- Handle slower background actions at intervals
-		eggTimer = eggTimer + 0.05
+		-- Secondary Automation Processing (Eggs, UI Suppressor Modules)
+		eggTimer = eggTimer + 0.02
 		if eggTimer >= 0.25 then
-			if autoWin and not isWinning then task.spawn(tpAndWalk) end
-			
 			if lowQ then
 				local pGui = P:FindFirstChild("PlayerGui")
 				local fxFolder = pGui and pGui:FindFirstChild("Effects")
 				if fxFolder then
 					local confetti = fxFolder:FindFirstChild("ConfettiFrame")
 					if confetti then
-						if confetti:IsA("ScreenGui") and confetti.Enabled then confetti.Enabled = false
-						elseif confetti:IsA("GuiObject") and confetti.Visible then confetti.Visible = false end
+						if confetti:IsA("ScreenGui") then confetti.Enabled = false end
 					end
 				end
 			end
@@ -191,7 +263,6 @@ task.spawn(function()
 			if autoEgg and eggTimer >= 0.75 then
 				doEggs()
 			end
-			
 			if eggTimer >= 0.75 then eggTimer = 0 end
 		end
 	end
