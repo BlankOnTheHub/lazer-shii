@@ -16,13 +16,9 @@ pcall(purge, game:GetService("CoreGui"))
 pcall(purge, game:GetService("CoreGui"):FindFirstChild("RobloxGui"))
 purge(P:WaitForChild("PlayerGui"))
 
--- 2. INSTANCE REFERENCES
+-- 2. INSTANCE REFERENCES (Resolved from your exact explorer screenshots)
 local RF = RS:WaitForChild("CommonModules"):WaitForChild("Systems"):WaitForChild("NetworkSystem"):WaitForChild("Network"):WaitForChild("RemoteFunction")
 
--- Original static target coordinates for manual/un-stretched methods
-local CF = CFrame.new(1144.38281, 105.178291, -267.520264, 0, 0, 1, 0, 1, -0, -1, 0, 0)
-
--- Deep Workspace hierarchy resolved from your Explorer screenshots
 local DynamicObjects = workspace:WaitForChild("DynamicObjects")
 local Worlds = DynamicObjects:WaitForChild("Worlds")
 local PurpleWorld = Worlds:WaitForChild("Purple")
@@ -30,22 +26,14 @@ local Lobby = PurpleWorld:WaitForChild("Lobby")
 local TreadmillsFolder = Lobby:WaitForChild("Treadmills")
 local Treadmill25 = TreadmillsFolder:WaitForChild("25")
 
--- [CRITICAL]: Attempt to track down the physical TouchTransmitter zone block responsible for wins
--- If the game handles wins via an explicit part inside the hierarchy, it will grab it here.
-local WinZonePart = workspace:FindFirstChild("WinZone") or workspace:FindFirstChild("WinPart") or workspace:FindFirstChild("FinishLine")
+-- Precise path to the Touch part from your screenshot
+local WinModel = PurpleWorld:WaitForChild("Win")
+local WinTouchPart = WinModel:WaitForChild("Touch")
 
 -- Global Tracking Variables
-local selectedMode = "None" -- Options: "None", "Auto Win Only", "Auto Treadmill 25 Only", "Combo (Stretch)"
-local autoEgg, lowQ, antiAfk, isWinning = false, false, false, false
+local selectedMode = "None" -- Options: "None", "Auto Win Only", "Auto Treadmill 25 Only", "Combo (In/Out)"
+local autoEgg, clearEffects, antiAfk = false, false, false
 local dropdownOpen = false
-
--- Backup variables to store the win part's original form
-local originalSize, originalCFrame
-
-if WinZonePart and WinZonePart:IsA("BasePart") then
-	originalSize = WinZonePart.Size
-	originalCFrame = WinZonePart.CFrame
-end
 
 -- 3. UTILITY METHODS
 local function getTreadmillCFrame()
@@ -55,21 +43,6 @@ local function getTreadmillCFrame()
 		return Treadmill25.CFrame + Vector3.new(0, 3, 0)
 	end
 	return nil
-end
-
-local function tpAndWalk()
-	if isWinning then return end
-	isWinning = true
-	local char = P.Character
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	local hum = char and char:FindFirstChild("Humanoid")
-	if hrp and hum then
-		hrp.CFrame = CFrame.new(CF.Position + Vector3.new(0, 0, 6))
-		task.wait(0.1)
-		hum:MoveTo(CF.Position)
-		task.wait(0.3)
-	end
-	isWinning = false
 end
 
 local function doEggs()
@@ -84,15 +57,7 @@ local function doEggs()
 	task.spawn(pcall, RF.InvokeServer, RF, eggArgs[1], eggArgs[2])
 end
 
--- Reset the win part back to its factory defaults when mode switches away from Combo
-local function resetWinPart()
-	if WinZonePart and originalSize and originalCFrame then
-		WinZonePart.Size = originalSize
-		WinZonePart.CFrame = originalCFrame
-	end
-end
-
--- 4. INTERFACE BUILDING (Dark Utility Panel Theme)
+-- 4. INTERFACE BUILDING
 local sg = Instance.new("ScreenGui")
 sg.Name = UI_NAME
 sg.ResetOnSpawn = false
@@ -147,7 +112,7 @@ dropContainer.Parent = f
 local dcCorner = Instance.new("UICorner", dropContainer)
 dcCorner.CornerRadius = UDim.new(0, 4)
 
-local options = {"None", "Auto Win Only", "Auto Treadmill 25 Only", "Combo (Stretch)"}
+local options = {"None", "Auto Win Only", "Auto Treadmill 25 Only", "Combo (In/Out)"}
 for i, optName in ipairs(options) do
 	local optBtn = Instance.new("TextButton")
 	optBtn.Size = UDim2.new(1, 0, 0, 25)
@@ -169,7 +134,6 @@ for i, optName in ipairs(options) do
 		dropMain.Text = "Mode: " .. optName .. " v"
 		dropdownOpen = false
 		TS:Create(dropContainer, TweenInfo.new(0.25), {Size = UDim2.new(1, -20, 0, 0)}):Play()
-		resetWinPart()
 	end)
 end
 
@@ -179,10 +143,10 @@ dropMain.MouseButton1Click:Connect(function()
 	TS:Create(dropContainer, TweenInfo.new(0.25), {Size = UDim2.new(1, -20, 0, targetHeight)}):Play()
 end)
 
--- Standard Control Buttons (Pushed Down to clear layout spacing for the Dropdown container)
+-- Layout Spacing Adjustment for Main Control Elements
 local b3 = makeBtn("BUY TRIPLE EGG", 60)
 local b4 = makeBtn("AUTO EGG: OFF", 100) b4.TextColor3 = Color3.fromRGB(235, 90, 90)
-local b5 = makeBtn("NO CONFETTI: OFF", 140) b5.TextColor3 = Color3.fromRGB(235, 90, 90)
+local b5 = makeBtn("KILL EFFECTS: OFF", 140) b5.TextColor3 = Color3.fromRGB(235, 90, 90)
 local b6 = makeBtn("ANTI-AFK: OFF", 180) b6.TextColor3 = Color3.fromRGB(235, 90, 90)
 
 local function toggleAnim(b, state, textOn, textOff)
@@ -192,10 +156,7 @@ end
 
 b3.MouseButton1Click:Connect(doEggs)
 b4.MouseButton1Click:Connect(function() autoEgg = not autoEgg toggleAnim(b4, autoEgg, "AUTO EGG: ON", "AUTO EGG: OFF") end)
-b5.MouseButton1Click:Connect(function() 
-	lowQ = not lowQ 
-	toggleAnim(b5, lowQ, "NO CONFETTI: ON", "NO CONFETTI: OFF") 
-end)
+b5.MouseButton1Click:Connect(function() clearEffects = not clearEffects toggleAnim(b5, clearEffects, "KILL EFFECTS: ON", "KILL EFFECTS: OFF") end)
 b6.MouseButton1Click:Connect(function() antiAfk = not antiAfk toggleAnim(b6, antiAfk, "ANTI-AFK: ON", "ANTI-AFK: OFF") end)
 
 P.Idled:Connect(function()
@@ -208,62 +169,66 @@ P.Idled:Connect(function()
 	end
 end)
 
--- 6. RUNTIME PROCESSOR LOOP
+-- 6. RUNTIME POSITIONING ENGINE
 task.spawn(function()
-	local eggTimer = 0
 	while true do
-		task.wait(0.02) -- Smooth physics lock tracking cycle
+		task.wait(0.02) -- Stable physical tick execution frequency
 		
 		local char = P.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		local hum = char and char:FindFirstChild("Humanoid")
 		
-		-- EXECUTE AUTOMATION BASED ON DROPDOWN STATUS
-		if selectedMode == "Auto Win Only" then
-			if not isWinning then task.spawn(tpAndWalk) end
-			
-		elseif selectedMode == "Auto Treadmill 25 Only" then
-			if hrp then
+		if hrp then
+			if selectedMode == "Auto Win Only" then
+				if WinTouchPart then
+					hrp.CFrame = WinTouchPart.CFrame
+					task.wait(0.05) -- Tiny step time to fire touch registration
+				end
+				
+			elseif selectedMode == "Auto Treadmill 25 Only" then
 				local tCF = getTreadmillCFrame()
 				if tCF then hrp.CFrame = tCF end
-			end
-			
-		elseif selectedMode == "Combo (Stretch)" then
-			-- 1. Lock the character securely onto the machine coordinates
-			if hrp then
+				
+			elseif selectedMode == "Combo (In/Out)" then
+				-- Step 1: Snap into the Touch block to register the win
+				if WinTouchPart then
+					hrp.CFrame = WinTouchPart.CFrame
+					task.wait(0.04) -- Holds just long enough for the engine's Touched listener to track it
+				end
+				
+				-- Step 2: Instantly drag back onto Treadmill 25 to continue training
 				local tCF = getTreadmillCFrame()
-				if tCF then hrp.CFrame = tCF end
-			end
-			
-			-- 2. Expand and transform the finish line zone directly over the machine bounds
-			if WinZonePart and Treadmill25 then
-				pcall(function()
-					local targetPos = Treadmill25:IsA("Model") and Treadmill25:GetPivot().Position or Treadmill25.Position
-					WinZonePart.Size = Vector3.new(25, 15, 25) -- Stretches container bounds out completely
-					WinZonePart.CFrame = CFrame.new(targetPos)
-					WinZonePart.CanCollide = false
-				end)
+				if tCF then
+					hrp.CFrame = tCF
+					task.wait(0.08) -- Time allocation to allow treadmill speed accumulation ticks
+				end
 			end
 		end
+	end
+end)
+
+-- 7. EFFECT PURGER & EGG MANAGER LOOP
+task.spawn(function()
+	local eggTimer = 0
+	while true do
+		task.wait(0.1) -- Quick refresh tracking for UI popups
 		
-		-- Secondary Automation Processing (Eggs, UI Suppressor Modules)
-		eggTimer = eggTimer + 0.02
-		if eggTimer >= 0.25 then
-			if lowQ then
+		-- COMPLETE EFFECTS WIPE MODULE
+		if clearEffects then
+			pcall(function()
 				local pGui = P:FindFirstChild("PlayerGui")
 				local fxFolder = pGui and pGui:FindFirstChild("Effects")
 				if fxFolder then
-					local confetti = fxFolder:FindFirstChild("ConfettiFrame")
-					if confetti then
-						if confetti:IsA("ScreenGui") then confetti.Enabled = false end
-					end
+					-- Drops performance overhead by dumping everything inside the frame instantly
+					fxFolder:ClearAllChildren()
 				end
-			end
-			
-			if autoEgg and eggTimer >= 0.75 then
-				doEggs()
-			end
-			if eggTimer >= 0.75 then eggTimer = 0 end
+			 pGui.DescantPopups:ClearAllChildren() -- Clears screen clutter if game puts win banners elsewhere
+			end)
+		end
+		
+		eggTimer = eggTimer + 0.1
+		if autoEgg and eggTimer >= 0.7 then
+			eggTimer = 0
+			doEggs()
 		end
 	end
 end)
